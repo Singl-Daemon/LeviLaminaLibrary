@@ -4,7 +4,21 @@ on:
       - published
 
 jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: SDK
+          path: |
+            LeviLamina/
+
   upload-to-release:
+    needs:
+      - build
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -12,16 +26,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Archive LeviLamina Librar directory
+      - name: Download SDK artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: SDK
+          path: release/SDK/
+
+      - name: Archive SDK directory
         run: |
-          cd LeviLamina
-          zip -r ../levilaminalibrary-windows-x64.zip *
+          cd release/SDK
+          zip -r ../SDK.zip *
           cd ..
 
       - name: Calculate SHA256
         id: calculate-sha256
         run: |
-          echo release=$(sha256sum LeviLamina/levilaminalibrary-windows-x64.zip | awk '{print $1}') >> $GITHUB_OUTPUT
+          echo release=$(sha256sum release/SDK.zip | awk '{print $1}') >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         id: create_release
@@ -31,6 +51,6 @@ jobs:
           body: |
             | File | SHA256 |
             | ---- | ------ |
-            | levilaminalibrary-windows-x64.zip | ${{ steps.calculate-sha256.outputs.release }} |
+            | SDK.zip | ${{ steps.calculate-sha256.outputs.release }} |
           files: |
-            LeviLamina/levilaminalibrary-windows-x64.zip
+            release/SDK.zip
