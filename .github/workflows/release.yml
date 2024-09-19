@@ -1,0 +1,36 @@
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  upload-to-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Archive LeviLamina Librar directory
+        run: |
+          cd LeviLamina
+          zip -r ../levilaminalibrary-windows-x64.zip *
+          cd ..
+
+      - name: Calculate SHA256
+        id: calculate-sha256
+        run: |
+          echo release=$(sha256sum LeviLamina/levilaminalibrary-windows-x64.zip | awk '{print $1}') >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          append_body: true
+          body: |
+            | File | SHA256 |
+            | ---- | ------ |
+            | levilaminalibrary-windows-x64.zip | ${{ steps.calculate-sha256.outputs.release }} |
+          files: |
+            LeviLamina/levilaminalibrary-windows-x64.zip
