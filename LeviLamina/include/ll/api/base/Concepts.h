@@ -5,6 +5,7 @@
 #include <tuple>
 #include <type_traits>
 #include <xutility>
+#include <span> // temporarily fix
 
 #include "ll/api/base/Macro.h"
 #include "ll/api/base/StdInt.h"
