@@ -7,10 +7,10 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
       - name: Run Script
         run: |
-          git clone https://github.com/killcerr/LeviLaminLibraryAutoGenerate.git .
-          ls
           powershell ./generate.ps1
 
       - uses: actions/upload-artifact@v4
