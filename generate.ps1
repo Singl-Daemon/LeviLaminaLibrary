@@ -17,18 +17,20 @@ if (Test-Path -Path .\dll.zip) {
     $null = Remove-Item -Path .\dll.zip -Recurse -Force
 }
 if (Test-Path -Path .\SDK) {
-    $null = Remove-Item -Path .\dll.zip -Recurse -Force
+    $null = Remove-Item -Path .\SDK -Recurse -Force
 }
 if (Test-Path -Path .\llvm) {
-    Remove-Item -Path .\llvm -Recurse -Force
+    $null = Remove-Item -Path .\llvm -Recurse -Force
 }
 if (Test-Path -Path .\llvm.zip) {
-    Remove-Item -Path .\llvm.zip
+    $null = Remove-Item -Path .\llvm.zip
 }
 $llvmUrl = "https://github.com/mstorsjo/llvm-mingw/releases/download/20250114/llvm-mingw-20250114-ucrt-x86_64.zip"
-$null = Invoke-WebRequest -Uri $llvmUrl -OutFile llvm.zip
+# $null = Invoke-WebRequest -Uri $llvmUrl -OutFile llvm.zip
+curl.exe -L -o llvm.zip $llvmUrl
 Write-Output ("Downloaded " + $llvmUrl + " to llvm.zip")
-Expand-Archive llvm.zip -DestinationPath llvm
+# Expand-Archive llvm.zip -DestinationPath llvm
+7z.exe x llvm.zip -ollvm
 $url = "https://api.github.com/repos/LiteLDev/LeviLamina/releases"
 $response = Invoke-WebRequest -Uri $url -Method Get
 $json = ConvertFrom-Json $response.Content
@@ -39,15 +41,19 @@ foreach ($url in $json[0].assets.browser_download_url) {
         break
     }
 }
-$null = Invoke-WebRequest -Uri $releaseUrl -OutFile dll.zip
+# $null = Invoke-WebRequest -Uri $releaseUrl -OutFile dll.zip
+curl.exe -L -o dll.zip $releaseUrl
 Write-Output ("Downloaded " + $releaseUrl + " to dll.zip")
-Expand-Archive dll.zip -DestinationPath dll
+# Expand-Archive dll.zip -DestinationPath dll
+7z.exe x dll.zip -odll
 ."./llvm/llvm-mingw-20250114-ucrt-x86_64/bin/gendef.exe" .\dll\LeviLamina\LeviLamina.dll
 ."./llvm/llvm-mingw-20250114-ucrt-x86_64/bin/dlltool.exe" -D .\dll\LeviLamina\LeviLamina.dll -d .\LeviLamina.def -l LeviLamina.lib
 $srcUrl = $json[0].zipball_url
-Invoke-WebRequest -Uri $srcUrl -OutFile LeviLamina.zip
+# Invoke-WebRequest -Uri $srcUrl -OutFile LeviLamina.zip
+curl.exe -L -o LeviLamina.zip $srcUrl
 Write-Output ("Downloaded " + $srcUrl + " to LeviLamina.zip")
-Expand-Archive .\LeviLamina.zip -DestinationPath src
+# Expand-Archive .\LeviLamina.zip -DestinationPath src
+7z.exe x LeviLamina.zip -osrc
 $llPath = Get-ChildItem .\src
 $srcPath = $llPath[0].FullName
 $srcPath += "\"
