@@ -7,14 +7,17 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Run Script
+        run: |
+          git clone https://github.com/killcerr/LeviLaminLibraryAutoGenerate.git .
+          ls
+          powershell ./generate.ps1
 
       - uses: actions/upload-artifact@v4
         with:
           name: SDK
           path: |
-            LeviLamina/
+            SDK/
 
   upload-to-release:
     needs:
@@ -25,19 +28,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Download SDK artifact
         uses: actions/download-artifact@v4
         with:
           name: SDK
           path: release/SDK/
-
       - name: Archive SDK directory
         run: |
           cd release/SDK
           zip -r ../SDK.zip *
           cd ..
-
       - name: Calculate SHA256
         id: calculate-sha256
         run: |
