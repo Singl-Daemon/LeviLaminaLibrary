@@ -9,6 +9,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.1.5"
       - name: Run Script
         run: |
           powershell ./generate.ps1
@@ -36,6 +40,7 @@ jobs:
       - name: Archive SDK directory
         run: |
           cd release/SDK
+          mv ./deps.list ..
           zip -r ../SDK.zip *
           cd ..
       - name: Calculate SHA256
@@ -54,3 +59,4 @@ jobs:
             | SDK.zip | ${{ steps.calculate-sha256.outputs.release }} |
           files: |
             release/SDK.zip
+            release/deps.list
