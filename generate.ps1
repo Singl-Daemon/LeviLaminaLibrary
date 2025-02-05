@@ -79,6 +79,7 @@ foreach ($filePath in $filePaths) {
     Copy-Item $filePath.FullName $targetName
     Write-Output ("Copy " + $filePath.FullName + " to " + $targetName + $filePath.Name)
 }
+lua genDeps.lua "$srcPath\xmake.lua" > "./SDK\deps.list"
 $null = Remove-Item ".\SDK\include\ll\core" -Recurse -Force
 $null = mkdir .\SDK\lib
 $null = Move-Item .\LeviLamina.lib .\SDK\lib
