@@ -1,85 +1,182 @@
-if (Test-Path -Path .\LeviLamina.zip) { 
-    $null = Remove-Item -Path .\LeviLamina.zip
-}
-if (Test-Path -Path .\LeviLamina) { 
-    $null = Remove-Item -Path .\LeviLamina -Recurse -Force
-}
-if (Test-Path -Path .\LeviLamina.def) { 
-    $null = Remove-Item -Path .\LeviLamina.def
-}
-if (Test-Path -Path .\LeviLamina.lib) { 
-    $null = Remove-Item -Path .\LeviLamina.lib
-}
-if (Test-Path -Path .\dll) { 
-    $null = Remove-Item -Path .\dll -Recurse -Force
-}
-if (Test-Path -Path .\dll.zip) { 
-    $null = Remove-Item -Path .\dll.zip -Recurse -Force
-}
-if (Test-Path -Path .\SDK) {
-    $null = Remove-Item -Path .\SDK -Recurse -Force
-}
-if (Test-Path -Path .\llvm) {
-    $null = Remove-Item -Path .\llvm -Recurse -Force
-}
-if (Test-Path -Path .\llvm.zip) {
-    $null = Remove-Item -Path .\llvm.zip
-}
-$llvmUrl = "https://github.com/mstorsjo/llvm-mingw/releases/download/20250114/llvm-mingw-20250114-ucrt-x86_64.zip"
-# $null = Invoke-WebRequest -Uri $llvmUrl -OutFile llvm.zip
-curl.exe -L -o llvm.zip $llvmUrl
-Write-Output ("Downloaded " + $llvmUrl + " to llvm.zip")
-# Expand-Archive llvm.zip -DestinationPath llvm
-7z.exe x llvm.zip -ollvm
-$url = "https://api.github.com/repos/LiteLDev/LeviLamina/releases"
-$response = Invoke-WebRequest -Uri $url -Method Get
-$json = ConvertFrom-Json $response.Content
-$releaseUrl = "" 
-foreach ($url in $json[0].assets.browser_download_url) {
-    if ($url.EndsWith("levilamina-release-windows-x64.zip")) {
-        $releaseUrl = $url
-        break
+﻿class File {
+    static [void] CleanWorkspace() {
+        $cleanItems = [System.Collections.Generic.List[string]]@(
+            "LeviLamina.zip", "LeviLamina", 
+            "LeviLamina.def", "LeviLamina.lib", "SDK", 
+            "llvm.zip", "LeviLamina-src.zip"
+        )
+
+        $cleanItems | ForEach-Object {
+            if (Test-Path $_) {
+                $ProgressPreference = 'SilentlyContinue'
+                Remove-Item $_ -Recurse -Force -ErrorAction SilentlyContinue
+                Write-Host ("[File] Removed: {0}" -f $_)
+            }
+        }
+    }
+
+    static [void] EnsureDirectory([string]$path) {
+        if (-not (Test-Path $path)) {
+            New-Item -ItemType Directory -Path $path | Out-Null
+        }
+    }
+
+    static [void] CopyHeaders(
+        [string]$sourceRoot,
+        [string]$sourceSubDir,
+        [string]$targetSubDir
+    ) {
+        $ProgressPreference = 'SilentlyContinue'
+        $sourcePath = Join-Path $sourceRoot $sourceSubDir
+        [File]::EnsureDirectory("./SDK")
+        $targetBase = Join-Path (Get-Item "./SDK").FullName "include"
+        [File]::EnsureDirectory($targetBase)
+        $allDirs = Get-ChildItem $sourcePath -Recurse -Directory | ForEach-Object {
+            $_.FullName.Substring($sourceRoot.Length + $sourceSubDir.Length)
+        }
+        $allDirs | ForEach-Object {
+            [File]::EnsureDirectory((Join-Path $targetBase $_))
+        }
+        Get-ChildItem $sourcePath -Recurse -Filter *.h | ForEach-Object -Parallel {
+            $targetDir = Join-Path $using:targetBase $_.DirectoryName.Substring($using:sourceRoot.Length + $using:sourceSubDir.Length)
+            Copy-Item $_.FullName $targetDir -ErrorAction Stop
+        } -ThrottleLimit 8
     }
 }
-# $null = Invoke-WebRequest -Uri $releaseUrl -OutFile dll.zip
-curl.exe -L -o dll.zip $releaseUrl
-Write-Output ("Downloaded " + $releaseUrl + " to dll.zip")
-# Expand-Archive dll.zip -DestinationPath dll
-7z.exe x dll.zip -odll
-."./llvm/llvm-mingw-20250114-ucrt-x86_64/bin/gendef.exe" .\dll\LeviLamina\LeviLamina.dll
-."./llvm/llvm-mingw-20250114-ucrt-x86_64/bin/dlltool.exe" -D .\dll\LeviLamina\LeviLamina.dll -d .\LeviLamina.def -l LeviLamina.lib
-$srcUrl = $json[0].zipball_url
-# Invoke-WebRequest -Uri $srcUrl -OutFile LeviLamina.zip
-curl.exe -L -o LeviLamina.zip $srcUrl
-Write-Output ("Downloaded " + $srcUrl + " to LeviLamina.zip")
-# Expand-Archive .\LeviLamina.zip -DestinationPath src
-7z.exe x LeviLamina.zip -osrc
-$llPath = Get-ChildItem .\src
-$srcPath = $llPath[0].FullName
-$srcPath += "\"
-$filePaths = Get-ChildItem -Path ($srcPath + "\src") -Recurse -Filter *.h
-foreach ($filePath in $filePaths) {
-    $fullName = $filePath.DirectoryName
-    $targetName = "SDK\include\" + $fullName.Substring( $srcPath.Length + "\src".Length)
-    if (!((Test-Path -Path $targetName))) {
-        $null = mkdir $targetName
-        Write-Output ("Mkdir " + $targetName)
+
+class Network {
+    static [bool] DownloadFile(
+        [string]$url,
+        [string]$outputPath,
+        [int]$retries
+    ) {
+        for ($i = 1; $i -le $retries; $i++) {
+            try {
+                Invoke-WebRequest -Uri $url -OutFile $outputPath -UseBasicParsing
+                Write-Host "[Network] Downloaded: $outputPath"
+                return $true
+            }
+            catch {
+                Write-Warning "[Network] Attempt $i failed: $($_.Exception.Message)"
+                if ($i -eq $retries) { return $false }
+                Start-Sleep -Seconds (5 * $i)
+            }
+        }
+        return $false
     }
-    Copy-Item $filePath.FullName $targetName
-    Write-Output ("Copy " + $filePath.FullName + " to " + $targetName + $filePath.Name)
 }
-$filePaths = Get-ChildItem -Path ($srcPath + "\src-server") -Recurse -Filter *.h
-foreach ($filePath in $filePaths) {
-    $fullName = $filePath.DirectoryName
-    $targetName = "SDK\include\" + $fullName.Substring( $srcPath.Length + "\src-server".Length)
-    if (!((Test-Path -Path $targetName))) {
-        $null = mkdir $targetName
-        Write-Output ("Mkdir " + $targetName)
+
+class Archive {
+    static [void] Extract(
+        [string]$zipPath,
+        [string]$destination
+    ) {
+        Add-Type -Assembly System.IO.Compression.FileSystem
+        [File]::EnsureDirectory($destination)
+        try {
+            if (Test-Path $destination) {
+                Remove-Item "$destination\*" -Recurse -Force
+            }
+            [System.IO.Compression.ZipFile]::ExtractToDirectory(
+                (Resolve-Path $zipPath).Path,
+                (Resolve-Path $destination).Path
+            )
+            Write-Host "[Archive] Extracted: $zipPath => $destination"
+        }
+        catch {
+            Write-Error "[Archive] Extraction failed: $_"
+            throw
+        }
     }
-    Copy-Item $filePath.FullName $targetName
-    Write-Output ("Copy " + $filePath.FullName + " to " + $targetName + $filePath.Name)
 }
-lua genDeps.lua "$srcPath\xmake.lua" > "./SDK\deps.list"
-$null = Remove-Item ".\SDK\include\ll\core" -Recurse -Force
-$null = mkdir .\SDK\lib
-$null = Move-Item .\LeviLamina.lib .\SDK\lib
+class Build {
+    static [void] GenerateLibraryDefinitions() {
+        $llvmBinPath = Join-Path (Get-Item "./llvm").FullName "llvm-mingw-20250114-ucrt-x86_64/bin"
+        $dllPath = Join-Path (Get-Item "./LeviLamina").FullName "LeviLamina/LeviLamina.dll"
+
+        $genDef = Join-Path $llvmBinPath "gendef.exe"
+        & $genDef $dllPath | Out-Null
+
+        $dllTool = Join-Path $llvmBinPath "dlltool.exe"
+        & $dllTool -D $dllPath -d "LeviLamina.def" -l "LeviLamina.lib" | Out-Null
+    }
+
+    static [void] CopyLib() {
+        $libDir = Join-Path (Get-Item "./SDK").FullName "lib"
+        [File]::EnsureDirectory($libDir)
+        Move-Item "./LeviLamina.lib" $libDir -Force
+    }
+    static [void] generateDepsList() {
+        $srcSubDir = (Get-ChildItem -Path "./LeviLamina/src" -Directory | Select-Object -First 1)
+        $xmakePath = Join-Path $srcSubDir.FullName "xmake.lua"
+        Write-Host $srcSubDir
+        lua genDeps.lua $xmakePath > "./SDK/deps.list"
+    }
+}
+
+function Main {
+    param(
+        [switch]$CleanOnly = $false
+    )
+    begin {
+        [File]::CleanWorkspace()
+        if ($CleanOnly) { return }
+    }
+    process {
+        try {
+            # prepare llvm
+            if (-not (Test-Path "llvm/.download_success")) {
+                $llvmUrl = "https://github.com/mstorsjo/llvm-mingw/releases/download/20250114/llvm-mingw-20250114-ucrt-x86_64.zip"
+                Write-Host "[Build] Downloading LLVM"
+                if (-not [Network]::DownloadFile($llvmUrl, "llvm.zip", 3)) {
+                    throw "Failed to download LLVM"
+                }
+                [Archive]::Extract("llvm.zip", "llvm")
+                New-Item llvm/.download_success -ItemType File -Force | Out-Null
+            }
+            # get info from gh api
+            $releases = Invoke-RestMethod "https://api.github.com/repos/LiteLDev/LeviLamina/releases"
+            $latest = $releases[0]
+            $releaseUrl = "" 
+            foreach ($url in $latest[0].assets.browser_download_url) {
+                if ($url.EndsWith("levilamina-release-windows-x64.zip")) {
+                    $releaseUrl = $url
+                    break
+                }
+            }
+            # download LeviLamina
+            Write-Host "[Build] Downloading LeviLamina"
+            [Network]::DownloadFile($releaseUrl, "levilamina.zip", 3) | Out-Null
+            [Archive]::Extract("levilamina.zip", "LeviLamina")
+
+            # download LeviLamina-src
+            Write-Host "[Build] Downloading LeviLamina source code"
+            [Network]::DownloadFile($latest.zipball_url, "LeviLamina-src.zip", 3) | Out-Null
+            [Archive]::Extract("LeviLamina-src.zip", "LeviLamina/src")
+
+            # generate library definitions
+            Write-Host "[Build] Generating library definitions"
+            [Build]::GenerateLibraryDefinitions()
+
+            # copy headers
+            $srcRoot = (Get-Item (Join-Path (Get-Item "./LeviLamina/src").FullName "*")).FullName
+            Write-Host "[Build] Copying headers"
+            [File]::CopyHeaders($srcRoot, "\src", "")
+            [File]::CopyHeaders($srcRoot, "\src-server", "")
+
+            Write-Host "[Build] Copying LeviLamina.lib"
+            [Build]::CopyLib()
+            Write-Host "[Build] Generating dependencies list"
+            [Build]::generateDepsList()
+        }
+        catch {
+            Write-Error "[FATAL] $_"
+            exit 1
+        }
+    }
+    end {
+        Write-Host "`n[SUCCESS] Build completed" -ForegroundColor Green
+    }
+}
+
+Main
